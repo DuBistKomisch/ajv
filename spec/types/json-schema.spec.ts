@@ -1,8 +1,11 @@
 import _Ajv from "../ajv"
-import type {JSONSchemaType} from "../.."
+import type {JSONSchemaType, JSONSchemaDataType} from "../.."
 import type {SchemaObject} from "../.."
 import chai from "../chai"
 const should = chai.should()
+
+/** type is true if T is identically E */
+type TypeEquality<T, E> = [T] extends [E] ? ([E] extends [T] ? true : false) : false
 
 interface MyData {
   foo: string
@@ -348,6 +351,92 @@ describe("JSONSchemaType type and validation as a type guard", () => {
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       validate(null).should.be.true
     })
+  })
+})
+
+describe("JSONSchemaDataType", () => {
+  it("should typecheck const schemas", () => {
+    const schema = {const: 'foo'} as const
+    const check: TypeEquality<JSONSchemaDataType<typeof schema>, 'foo'> = true
+
+    void [check]
+  })
+
+  it("should typecheck enum schemas", () => {
+    const schema = {enum: ['foo', 123]} as const
+    const check: TypeEquality<JSONSchemaDataType<typeof schema>, 'foo' | 123> = true
+
+    void [check]
+  })
+
+  it("should typecheck primitive type schemas", () => {
+    const schema = {type: "string"} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, string> = true
+
+    void [value]
+  })
+
+  it("should typecheck union of primitive type schemas", () => {
+    const schema = {type: ["string", "number"]} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, string | number> = true
+
+    void [value]
+  })
+
+  it("should typecheck tuple array schemas", () => {
+    const schema = {type: "array", items: [{ type: "boolean" }, { type: "string"}]} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, [boolean, string]> = true
+
+    void [value]
+  })
+
+  it("should typecheck generic array schemas", () => {
+    const schema = {type: "array", items: { type: "number" }} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, number[]> = true
+
+    void [value]
+  })
+
+  it("should typecheck tuple array with generic rest elements schemas", () => {
+    const schema = {type: "array", items: [{ type: "boolean" }, { type: "string"}], additionalItems: { type: "number" }} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, [boolean, string, ...number[]]> = true
+
+    void [value]
+  })
+
+  it("should typecheck object with explicit properties schemas", () => {
+    const schema = {type: "object", properties: { foo: { type: "boolean" }, bar: { type: "string"}}} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, { foo?: boolean, bar?: string}> = true
+
+    void [value]
+  })
+
+  it("should typecheck object with generic properties schemas", () => {
+    const schema = {type: "object", additionalProperties: { type: 'number' }} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, Record<string, number>> = true
+
+    void [value]
+  })
+
+  it("should typecheck object with additional properties schemas", () => {
+    const schema = {type: "object", properties: { foo: { type: "boolean" }, bar: { type: "string"}}, additionalProperties: { type: 'number' }} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, { foo?: boolean, bar?: string} & Record<string, number>> = true
+
+    void [value]
+  })
+
+  it("should typecheck object with some required properties schemas", () => {
+    const schema = {type: "object", properties: { foo: { type: "boolean" }, bar: { type: "string"}}, required: ['foo']} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, { foo: boolean, bar?: string}> = true
+
+    void [value]
+  })
+
+  it("should typecheck object with required additional properties schemas", () => {
+    const schema = {type: "object", additionalProperties: { type: 'number' }, required: ['foo', 'bar']} as const
+    const value: TypeEquality<JSONSchemaDataType<typeof schema>, { foo: number, bar: number} & Record<string, number>> = true
+
+    void [value]
   })
 })
 

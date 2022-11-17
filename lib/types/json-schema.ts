@@ -185,3 +185,81 @@ type Nullable<T> = undefined extends T
       enum?: Readonly<T[]>
       default?: T
     }
+
+type JSONSchemaDataDef<S, D extends Record<string, unknown>> =
+  // reference
+  // TODO
+  S extends {$ref: string}
+  ? D extends {[K in S["$ref"]]: infer V}
+    ? JSONSchemaDataDef<V, D>
+    : never
+  // enums
+  : S extends {const: infer C}
+  ? C
+  : S extends {enum: readonly (infer E)[]}
+  ? E
+  // union
+  : S extends {type: readonly (infer U)[]}
+  ? JSONSchemaDataUnion<U, D>
+  // primitives
+  : S extends {type: "number" | "integer"}
+  ? number
+  : S extends {type: "string"}
+  ? string
+  : S extends {type: "boolean"}
+  ? boolean
+  : S extends {type: "null"}
+  ? null
+  // arrays
+  : S extends {type: "array", items: infer I}
+  ? I extends readonly any[]
+    // tuple array
+    // Concat type is required here because mapped tuple syntax cannot be spread into another array type
+    // https://github.com/microsoft/TypeScript/issues/29919
+    ? Concat<[
+      { -readonly [K in keyof I]: JSONSchemaDataDef<I[K], D> },
+      // optional generic rest elements
+      S extends {additionalItems: infer A} ? JSONSchemaDataDef<A, D>[] : []
+    ]>
+    // generic array
+    : JSONSchemaDataDef<I, D>[]
+  // objects
+  // TODO dependentRequired, patternProperties
+  : S extends {type: "object", properties?: infer P, additionalProperties?: infer A, required?: infer R}
+  ? & (R extends readonly (infer X extends string)[]
+    // required properties, with type provided by properties then additionalProperties then any
+    ? { -readonly [K in X]-?:
+      K extends keyof P
+      ? JSONSchemaDataDef<P[K], D>
+      : A extends Record<string, unknown>
+      ? JSONSchemaDataDef<A, D>
+      : any }
+    : unknown)
+    // optional properties, excluding required
+    & (P extends Record<string, unknown>
+    ? R extends readonly (infer X extends string)[]
+      ? { -readonly [K in Exclude<keyof P, X>]+?: JSONSchemaDataDef<P[K], D>}
+      : { -readonly [K in keyof P]+?: JSONSchemaDataDef<P[K], D> }
+    : unknown)
+    // additional properties
+    & (A extends Record<string, unknown>
+    ? Record<string, JSONSchemaDataDef<A, D>>
+    : unknown)
+  // TODO allOf/anyOf/oneOf/not
+  // TODO if/then/else
+  // invalid
+  : never
+
+type JSONSchemaDataUnion<U, D extends Record<string, unknown>> =
+  U extends any ? JSONSchemaDataDef<{type: U}, D> : never;
+
+type Concat<T> = T extends [infer A, ...infer Rest]
+    ? A extends any[] ? [...A, ...Concat<Rest>] : A
+    : T;
+
+export type JSONSchemaDataType<S> =
+  S extends {$defs: Record<string, unknown>}
+  ? JSONSchemaDataDef<S, S["$defs"]>
+  : S extends {definitions: Record<string, unknown>}
+  ? JSONSchemaDataDef<S, S["definitions"]>
+  : JSONSchemaDataDef<S, Record<string, never>>
